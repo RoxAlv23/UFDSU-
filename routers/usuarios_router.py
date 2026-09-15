@@ -1,16 +1,11 @@
-from typing import List
+from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlmodel import Session, select
 
 from config.session_dependencia import get_session
-from models.usuario import (
-    Usuario,
-    UsuarioCreate,
-    UsuarioUpdate,
-    UsuarioPatch
-)
-from models.rol import Rol
+from models.usuario import Usuario
+from lib.pwd import hash_password
 
 
 router = APIRouter(
@@ -19,23 +14,26 @@ router = APIRouter(
 )
 
 
-@router.get("/", response_model=List[Usuario])
+@router.get("/")
 def listar_usuarios(
     session: Session = Depends(get_session)
 ):
-    consulta = select(Usuario)
+    usuarios = session.exec(
+        select(Usuario)
+    ).all()
 
-    resultado = session.exec(consulta)
-
-    return resultado.all()
+    return usuarios
 
 
-@router.get("/{usuario_id}", response_model=Usuario)
+@router.get("/{usuario_id}")
 def buscar_usuario(
     usuario_id: int,
     session: Session = Depends(get_session)
 ):
-    usuario = session.get(Usuario, usuario_id)
+    usuario = session.get(
+        Usuario,
+        usuario_id
+    )
 
     if not usuario:
         raise HTTPException(
@@ -46,17 +44,15 @@ def buscar_usuario(
     return usuario
 
 
-@router.post("/", response_model=Usuario, status_code=201)
+@router.post("/")
 def crear_usuario(
-    datos_usuario: UsuarioCreate,
+    usuario: Usuario,
     session: Session = Depends(get_session)
 ):
-    consulta_username = select(Usuario).where(
-        Usuario.username == datos_usuario.username
-    )
-
     usuario_existente = session.exec(
-        consulta_username
+        select(Usuario).where(
+            Usuario.username == usuario.username
+        )
     ).first()
 
     if usuario_existente:
@@ -65,82 +61,9 @@ def crear_usuario(
             detail="El username ya existe"
         )
 
-    consulta_rol = select(Rol).where(
-        Rol.id == datos_usuario.id_rol
+    usuario.password = hash_password(
+        usuario.password
     )
-
-    rol = session.exec(consulta_rol).first()
-
-    if not rol:
-        raise HTTPException(
-            status_code=404,
-            detail="El rol no existe"
-        )
-
-    nuevo_usuario = Usuario(
-        username=datos_usuario.username,
-        nombre=datos_usuario.nombre,
-        correo=datos_usuario.correo,
-        password=datos_usuario.password,
-        id_rol=datos_usuario.id_rol
-    )
-
-    session.add(nuevo_usuario)
-    session.commit()
-    session.refresh(nuevo_usuario)
-
-    return nuevo_usuario
-
-
-@router.put("/{usuario_id}", response_model=Usuario)
-def actualizar_usuario(
-    usuario_id: int,
-    datos_usuario: UsuarioUpdate,
-    session: Session = Depends(get_session)
-):
-    usuario = session.get(Usuario, usuario_id)
-
-    if not usuario:
-        raise HTTPException(
-            status_code=404,
-            detail="Usuario no encontrado"
-        )
-
-    if datos_usuario.username:
-        consulta_username = select(Usuario).where(
-            Usuario.username == datos_usuario.username,
-            Usuario.id != usuario_id
-        )
-
-        usuario_existente = session.exec(
-            consulta_username
-        ).first()
-
-        if usuario_existente:
-            raise HTTPException(
-                status_code=400,
-                detail="El username ya existe"
-            )
-
-    if datos_usuario.id_rol:
-        consulta_rol = select(Rol).where(
-            Rol.id == datos_usuario.id_rol
-        )
-
-        rol = session.exec(consulta_rol).first()
-
-        if not rol:
-            raise HTTPException(
-                status_code=404,
-                detail="El rol no existe"
-            )
-
-    datos = datos_usuario.model_dump(
-        exclude_unset=True
-    )
-
-    for campo, valor in datos.items():
-        setattr(usuario, campo, valor)
 
     session.add(usuario)
     session.commit()
@@ -149,13 +72,16 @@ def actualizar_usuario(
     return usuario
 
 
-@router.patch("/{usuario_id}", response_model=Usuario)
-def actualizar_usuario_parcial(
+@router.put("/{usuario_id}")
+def actualizar_usuario(
     usuario_id: int,
-    datos_usuario: UsuarioPatch,
+    datos: Usuario,
     session: Session = Depends(get_session)
 ):
-    usuario = session.get(Usuario, usuario_id)
+    usuario = session.get(
+        Usuario,
+        usuario_id
+    )
 
     if not usuario:
         raise HTTPException(
@@ -163,18 +89,59 @@ def actualizar_usuario_parcial(
             detail="Usuario no encontrado"
         )
 
-    datos = datos_usuario.model_dump(
-        exclude_unset=True
-    )
-
-    if "username" in datos:
-        consulta_username = select(Usuario).where(
-            Usuario.username == datos["username"],
+    usuario_existente = session.exec(
+        select(Usuario).where(
+            Usuario.username == datos.username,
             Usuario.id != usuario_id
         )
+    ).first()
 
+    if usuario_existente:
+        raise HTTPException(
+            status_code=400,
+            detail="El username ya existe"
+        )
+
+    usuario.username = datos.username
+    usuario.nombre = datos.nombre
+    usuario.correo = datos.correo
+    usuario.id_rol = datos.id_rol
+
+    if datos.password:
+        usuario.password = hash_password(
+            datos.password
+        )
+
+    session.add(usuario)
+    session.commit()
+    session.refresh(usuario)
+
+    return usuario
+
+
+@router.patch("/{usuario_id}")
+def actualizar_usuario_parcial(
+    usuario_id: int,
+    datos: dict,
+    session: Session = Depends(get_session)
+):
+    usuario = session.get(
+        Usuario,
+        usuario_id
+    )
+
+    if not usuario:
+        raise HTTPException(
+            status_code=404,
+            detail="Usuario no encontrado"
+        )
+
+    if "username" in datos:
         usuario_existente = session.exec(
-            consulta_username
+            select(Usuario).where(
+                Usuario.username == datos["username"],
+                Usuario.id != usuario_id
+            )
         ).first()
 
         if usuario_existente:
@@ -183,21 +150,21 @@ def actualizar_usuario_parcial(
                 detail="El username ya existe"
             )
 
+        usuario.username = datos["username"]
+
+    if "nombre" in datos:
+        usuario.nombre = datos["nombre"]
+
+    if "correo" in datos:
+        usuario.correo = datos["correo"]
+
     if "id_rol" in datos:
-        consulta_rol = select(Rol).where(
-            Rol.id == datos["id_rol"]
+        usuario.id_rol = datos["id_rol"]
+
+    if "password" in datos:
+        usuario.password = hash_password(
+            datos["password"]
         )
-
-        rol = session.exec(consulta_rol).first()
-
-        if not rol:
-            raise HTTPException(
-                status_code=404,
-                detail="El rol no existe"
-            )
-
-    for campo, valor in datos.items():
-        setattr(usuario, campo, valor)
 
     session.add(usuario)
     session.commit()
@@ -211,7 +178,10 @@ def eliminar_usuario(
     usuario_id: int,
     session: Session = Depends(get_session)
 ):
-    usuario = session.get(Usuario, usuario_id)
+    usuario = session.get(
+        Usuario,
+        usuario_id
+    )
 
     if not usuario:
         raise HTTPException(

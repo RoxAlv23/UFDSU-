@@ -1,61 +1,40 @@
 from typing import Optional
+from sqlmodel import SQLModel, Field
+from pydantic import EmailStr
 from datetime import datetime
 
-from sqlmodel import SQLModel, Field
 
+class Usuario(SQLModel, table=True):
+    __tablename__ = "usuarios"
 
-class UsuarioBase(SQLModel):
+    id: Optional[int] = Field(default=None, primary_key=True)
+
     username: str = Field(
-        min_length=3,
-        max_length=50
+        max_length=50,
+        unique=True,
+        nullable=False
     )
 
     nombre: str = Field(
-        min_length=3,
-        max_length=100
+        max_length=100,
+        nullable=False
     )
 
-    correo: str = Field(
-        min_length=5,
-        max_length=150
+    correo: EmailStr = Field(
+        max_length=150,
+        nullable=False
     )
 
     password: str = Field(
-        min_length=3,
-        max_length=255
+        max_length=255,
+        nullable=False
     )
 
-    id_rol: int
-
-
-class Usuario(UsuarioBase, table=True):
-    __tablename__ = "usuarios"
-
-    id: Optional[int] = Field(
-        default=None,
-        primary_key=True
+    id_rol: int = Field(
+        foreign_key="roles.id",
+        nullable=False
     )
 
     created_at: datetime = Field(
         default_factory=datetime.now
     )
-
-
-class UsuarioCreate(UsuarioBase):
-    pass
-
-
-class UsuarioUpdate(SQLModel):
-    username: Optional[str] = None
-    nombre: Optional[str] = None
-    correo: Optional[str] = None
-    password: Optional[str] = None
-    id_rol: Optional[int] = None
-
-
-class UsuarioPatch(SQLModel):
-    username: Optional[str] = None
-    nombre: Optional[str] = None
-    correo: Optional[str] = None
-    password: Optional[str] = None
-    id_rol: Optional[int] = None
