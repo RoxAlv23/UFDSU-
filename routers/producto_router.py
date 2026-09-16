@@ -7,6 +7,11 @@ from config.session_dependencia import SessionDep
 
 from models.cateogoria import Categoria
 
+from config.segurity_Dependencia import (
+    Token_Dependencia,
+    verificar_rol
+)
+
 from models.producto import (
     Producto,
     ProductoCreate,

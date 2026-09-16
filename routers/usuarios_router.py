@@ -7,6 +7,11 @@ from config.session_dependencia import get_session
 from models.usuario import Usuario
 from lib.pwd import hash_password
 
+from config.segurity_Dependencia import (
+    Token_Dependencia,
+    verificar_rol
+)
+
 
 router = APIRouter(
     prefix="/usuarios",

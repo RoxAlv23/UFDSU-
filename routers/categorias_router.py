@@ -1,7 +1,19 @@
 from fastapi import APIRouter, HTTPException
 from sqlmodel import select
+from sqlmodel import Session
 
-from config.session_dependencia import SessionDep
+from config.session_dependencia import SessionDep, get_session
+
+from config.segurity_Dependencia import Token_Dependencia
+
+from fastapi import Depends
+
+from fastapi import HTTPException
+
+from config.segurity_Dependencia import (
+    Token_Dependencia,
+    verificar_rol
+)
 
 from models.cateogoria import (
     Categoria,
@@ -47,24 +59,22 @@ def buscar_categoria(id: int, session: SessionDep):
 
 
 # AGREGAR UNA CATEGORÍA
-@router.post("/", response_model=Categoria)
-def agregar_categoria(
-    datos_categoria: CategoriaCreate,
-    session: SessionDep
+@router.post("/")
+def crear_categoria(
+    categoria: Categoria,
+    token: Token_Dependencia,
+    session: Session = Depends(get_session)
 ):
-
-    categoria_nueva = Categoria(
-        nombre=datos_categoria.nombre,
-        descripcion=datos_categoria.descripcion
+    verificar_rol(
+        token,
+        [1]
     )
 
-    session.add(categoria_nueva)
-
+    session.add(categoria)
     session.commit()
+    session.refresh(categoria)
 
-    session.refresh(categoria_nueva)
-
-    return categoria_nueva
+    return categoria
 
 
 # ACTUALIZAR UNA CATEGORÍA
@@ -103,30 +113,33 @@ def actualizar_categoria(
 
 
 # ELIMINAR UNA CATEGORÍA
-@router.delete("/{id}")
+@router.delete("/{categoria_id}")
 def eliminar_categoria(
-    id: int,
-    session: SessionDep
+    categoria_id: int,
+    token: Token_Dependencia,
+    session: Session = Depends(get_session)
 ):
-
-    consulta = select(Categoria).where(
-        Categoria.id == id
+    verificar_rol(
+        token,
+        [1]
     )
 
-    categoria = session.exec(consulta).first()
+    categoria = session.get(
+        Categoria,
+        categoria_id
+    )
 
     if not categoria:
         raise HTTPException(
             status_code=404,
-            detail="Categoria no encontrada"
+            detail="Categoría no encontrada"
         )
 
     session.delete(categoria)
-
     session.commit()
 
     return {
-        "mensaje": "Categoria eliminada correctamente"
+        "mensaje": "Categoría eliminada correctamente"
     }
 
 # PAGINACION DE CATEGORIAS
